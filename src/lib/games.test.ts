@@ -1,6 +1,7 @@
 import { describe, it, expect, beforeEach } from 'vitest';
 import { createTestDatabase } from '../../db/test-helpers';
 import { categories, publishers, games } from '../../db/schema';
+import { eq } from 'drizzle-orm';
 import type { Database } from './db';
 import {
     getAllGames,
@@ -50,6 +51,38 @@ describe('games data-access helpers', () => {
         const ids = await getAllGameIds(db);
         const all = await getAllGames(db);
         expect(ids).toEqual(all.map((g) => g.id));
+    });
+
+    it('filters games by one or more categories and a publisher', async () => {
+        await seedGames(db, 3);
+        const [otherCategory] = await db
+            .insert(categories)
+            .values({ name: 'Puzzle', description: 'other' })
+            .returning({ id: categories.id });
+        const [otherPublisher] = await db
+            .insert(publishers)
+            .values({ name: 'Pub Two', description: 'other' })
+            .returning({ id: publishers.id });
+        const [strategyCategory] = await db
+            .select({ id: categories.id })
+            .from(categories)
+            .where(eq(categories.name, 'Strategy'));
+        await db.insert(games).values({
+            title: 'Puzzle Game',
+            description: 'Puzzle',
+            starRating: 4,
+            categoryId: otherCategory.id,
+            publisherId: otherPublisher.id,
+        });
+
+        const strategyGames = await getAllGames(db, { categoryIds: [otherCategory.id, strategyCategory.id] });
+        expect(strategyGames.map((game) => game.title)).toEqual(['Game 01', 'Game 02', 'Game 03', 'Puzzle Game']);
+
+        const filtered = await getAllGames(db, {
+            categoryIds: [otherCategory.id],
+            publisherId: otherPublisher.id,
+        });
+        expect(filtered.map((game) => game.title)).toEqual(['Puzzle Game']);
     });
 
     it('fetches a single game by id', async () => {

@@ -42,6 +42,12 @@ npm run build      # prebuild migrates + seeds, then builds the static site
 npm run preview
 ```
 
+## Filtering games
+
+Use the category checkboxes and publisher menu on the home page to narrow the
+catalog. Multiple categories can be selected together, and the publisher
+selection can be combined with category filters.
+
 ## Database
 
 The SQLite database is built from `db/games.csv` — there is no live data to migrate.
