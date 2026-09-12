@@ -1,4 +1,4 @@
-import { and, asc, eq, inArray } from 'drizzle-orm';
+import { and, asc, count, eq, inArray } from 'drizzle-orm';
 import type { Database } from './db';
 import { games, categories, publishers } from '../../db/schema';
 import type { Game } from '../types/game';
@@ -55,8 +55,24 @@ export interface GameFilters {
     publisherId?: number;
 }
 
-/** All games ordered by title. */
-export async function getAllGames(db: Database, filters: GameFilters = {}): Promise<Game[]> {
+export const DEFAULT_GAME_PAGE_SIZE = 6;
+
+export interface GamePageOptions extends GameFilters {
+    page?: number;
+    pageSize?: number;
+}
+
+export interface GamePage {
+    games: Game[];
+    page: number;
+    pageSize: number;
+    totalGames: number;
+    totalPages: number;
+    hasPreviousPage: boolean;
+    hasNextPage: boolean;
+}
+
+function buildGameConditions(filters: GameFilters) {
     const conditions = [];
     if (filters.categoryIds && filters.categoryIds.length > 0) {
         conditions.push(inArray(games.categoryId, filters.categoryIds));
@@ -64,10 +80,46 @@ export async function getAllGames(db: Database, filters: GameFilters = {}): Prom
     if (filters.publisherId !== undefined) {
         conditions.push(eq(games.publisherId, filters.publisherId));
     }
+    return conditions;
+}
 
+/** All games ordered by title. */
+export async function getAllGames(db: Database, filters: GameFilters = {}): Promise<Game[]> {
+    const conditions = buildGameConditions(filters);
     const query = baseGamesQuery(db);
     const rows = await (conditions.length > 0 ? query.where(and(...conditions)) : query).orderBy(asc(games.title));
     return rows.map(mapGame);
+}
+
+/** A stable, filter-aware page of games ordered by title. */
+export async function getGamesPage(db: Database, options: GamePageOptions = {}): Promise<GamePage> {
+    const pageSize = Number.isInteger(options.pageSize) && options.pageSize !== undefined && options.pageSize > 0
+        ? options.pageSize
+        : DEFAULT_GAME_PAGE_SIZE;
+    const requestedPage = Number.isInteger(options.page) && options.page !== undefined && options.page > 0
+        ? options.page
+        : 1;
+    const conditions = buildGameConditions(options);
+    const countQuery = db.select({ count: count() }).from(games);
+    const countRows = await (conditions.length > 0 ? countQuery.where(and(...conditions)) : countQuery);
+    const totalGames = Number(countRows[0]?.count ?? 0);
+    const totalPages = Math.ceil(totalGames / pageSize);
+    const page = totalPages > 0 ? Math.min(requestedPage, totalPages) : 1;
+    const query = baseGamesQuery(db);
+    const rows = await (conditions.length > 0 ? query.where(and(...conditions)) : query)
+        .orderBy(asc(games.title))
+        .limit(pageSize)
+        .offset((page - 1) * pageSize);
+
+    return {
+        games: rows.map(mapGame),
+        page,
+        pageSize,
+        totalGames,
+        totalPages,
+        hasPreviousPage: page > 1,
+        hasNextPage: page < totalPages,
+    };
 }
 
 /** All game ids ordered by title. */

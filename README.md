@@ -48,6 +48,10 @@ Use the category checkboxes and publisher menu on the home page to narrow the
 catalog. Multiple categories can be selected together, and the publisher
 selection can be combined with category filters.
 
+The catalog is split into six-game pages. Use the accessible pagination controls
+below the game grid to browse `/games/page/2` and later pages; the home page is
+the first page.
+
 ## Database
 
 The SQLite database is built from `db/games.csv` — there is no live data to migrate.

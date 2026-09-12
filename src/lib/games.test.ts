@@ -7,6 +7,7 @@ import {
     getAllGames,
     getAllGameIds,
     getGameById,
+    getGamesPage,
 } from './games';
 
 async function seedGames(db: Database, count: number): Promise<void> {
@@ -44,6 +45,52 @@ describe('games data-access helpers', () => {
         expect(all.map((g) => g.title)).toEqual(['Game 01', 'Game 02', 'Game 03']);
         expect(all[0].category).toEqual({ id: expect.any(Number), name: 'Strategy' });
         expect(all[0].publisher).toEqual({ id: expect.any(Number), name: 'Pub One' });
+    });
+
+    it('returns a stable page of games with navigation metadata', async () => {
+        await seedGames(db, 7);
+
+        const page = await getGamesPage(db, { page: 2, pageSize: 3 });
+
+        expect(page.games.map((game) => game.title)).toEqual(['Game 04', 'Game 05', 'Game 06']);
+        expect(page.totalGames).toBe(7);
+        expect(page.totalPages).toBe(3);
+        expect(page.page).toBe(2);
+        expect(page.hasPreviousPage).toBe(true);
+        expect(page.hasNextPage).toBe(true);
+    });
+
+    it('returns the final partial page and disables next navigation', async () => {
+        await seedGames(db, 7);
+
+        const page = await getGamesPage(db, { page: 3, pageSize: 3 });
+
+        expect(page.games.map((game) => game.title)).toEqual(['Game 07']);
+        expect(page.hasPreviousPage).toBe(true);
+        expect(page.hasNextPage).toBe(false);
+    });
+
+    it('normalizes invalid page values and clamps pages past the end', async () => {
+        await seedGames(db, 2);
+
+        const invalidPage = await getGamesPage(db, { page: 0, pageSize: 0 });
+        const pastEnd = await getGamesPage(db, { page: 99, pageSize: 1 });
+
+        expect(invalidPage.page).toBe(1);
+        expect(invalidPage.pageSize).toBe(6);
+        expect(pastEnd.page).toBe(2);
+        expect(pastEnd.games.map((game) => game.title)).toEqual(['Game 02']);
+    });
+
+    it('applies filters before calculating page totals', async () => {
+        await seedGames(db, 3);
+        const [category] = await db.select({ id: categories.id }).from(categories);
+
+        const page = await getGamesPage(db, { categoryIds: [category.id], pageSize: 2 });
+
+        expect(page.totalGames).toBe(3);
+        expect(page.totalPages).toBe(2);
+        expect(page.games).toHaveLength(2);
     });
 
     it('returns all game ids ordered by title', async () => {
