@@ -9,6 +9,12 @@ import { getAllGames } from '../lib/games';
 export const prerender = true;
 
 const games = await getAllGames(getDatabase());
+const categories = [...new Map(
+  games.filter((game) => game.category).map((game) => [game.category!.id, game.category!]),
+).values()].sort((a, b) => a.name.localeCompare(b.name));
+const publishers = [...new Map(
+  games.filter((game) => game.publisher).map((game) => [game.publisher!.id, game.publisher!]),
+).values()].sort((a, b) => a.name.localeCompare(b.name));
 ---
 
 <Layout title="Tailspin Toys - Crowdfunding your new favorite game!">
@@ -24,10 +30,74 @@ const games = await getAllGames(getDatabase());
       {games.length === 0 ? (
         <EmptyState text="No games available at the moment." />
       ) : (
+        <>
+        <form class="mb-8 rounded-xl border border-slate-700 bg-slate-800/60 p-6" data-testid="game-filters" aria-label="Filter games">
+          <div class="grid gap-6 md:grid-cols-[2fr_1fr_auto] md:items-end">
+            <fieldset>
+              <legend class="mb-3 text-sm font-medium text-slate-200">Categories</legend>
+              <div class="flex flex-wrap gap-3">
+                {categories.map((category) => (
+                  <label class="flex items-center gap-2 text-sm text-slate-300">
+                    <input
+                      type="checkbox"
+                      value={category.id}
+                      class="h-4 w-4 rounded border-slate-600 bg-slate-900 text-blue-500 focus:ring-2 focus:ring-blue-500"
+                      data-testid={`category-filter-${category.id}`}
+                    />
+                    {category.name}
+                  </label>
+                ))}
+              </div>
+            </fieldset>
+            <label class="text-sm font-medium text-slate-200" for="publisher-filter">
+              Publisher
+              <select id="publisher-filter" class="mt-2 block w-full rounded-lg border border-slate-600 bg-slate-900 px-3 py-2 text-slate-100 focus:ring-2 focus:ring-blue-500 focus:outline-none" data-testid="publisher-filter">
+                <option value="">All publishers</option>
+                {publishers.map((publisher) => <option value={publisher.id}>{publisher.name}</option>)}
+              </select>
+            </label>
+            <button type="reset" class="rounded-lg border border-slate-600 px-4 py-2 text-sm text-slate-200 transition-colors hover:bg-slate-700 focus:ring-2 focus:ring-blue-500 focus:outline-none" data-testid="clear-filters">
+              Clear filters
+            </button>
+          </div>
+          <p class="mt-4 text-sm text-slate-400" role="status" aria-live="polite" data-testid="filter-results-count"></p>
+        </form>
         <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6" data-testid="games-grid">
           {games.map((game) => <GameCard game={game} />)}
         </div>
+        <div class="hidden" data-testid="no-filter-results"><EmptyState text="No games match those filters." /></div>
+        </>
       )}
     </div>
   </div>
 </Layout>
+
+<script>
+  const form = document.querySelector<HTMLFormElement>('[data-testid="game-filters"]');
+  const cards = [...document.querySelectorAll<HTMLElement>('[data-testid="game-card"]')];
+  const count = document.querySelector<HTMLElement>('[data-testid="filter-results-count"]');
+  const empty = document.querySelector<HTMLElement>('[data-testid="no-filter-results"]');
+
+  const applyFilters = (): void => {
+    const selectedCategories = new Set(
+      [...document.querySelectorAll<HTMLInputElement>('[data-testid^="category-filter-"]:checked')].map((input) => input.value),
+    );
+    const publisher = document.querySelector<HTMLSelectElement>('[data-testid="publisher-filter"]')?.value ?? '';
+    let visible = 0;
+
+    cards.forEach((card) => {
+      const matchesCategory = selectedCategories.size === 0 || selectedCategories.has(card.dataset.categoryId ?? '');
+      const matchesPublisher = publisher === '' || publisher === card.dataset.publisherId;
+      const matches = matchesCategory && matchesPublisher;
+      card.hidden = !matches;
+      if (matches) visible += 1;
+    });
+
+    if (count) count.textContent = `${visible} ${visible === 1 ? 'game' : 'games'} shown`;
+    empty?.classList.toggle('hidden', visible > 0);
+  };
+
+  form?.addEventListener('change', applyFilters);
+  form?.addEventListener('reset', () => requestAnimationFrame(applyFilters));
+  applyFilters();
+</script>
