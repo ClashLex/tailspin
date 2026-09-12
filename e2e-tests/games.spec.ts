@@ -24,14 +24,32 @@ test.describe('Game Listing and Navigation', () => {
     });
   });
 
-  test('should filter games by category and publisher', async ({ page }) => {
+  test('should paginate the game list with accessible controls', async ({ page }) => {
     await page.goto('/');
+
+    const pagination = page.getByTestId('pagination');
+    await expect(pagination).toBeVisible();
+    await expect(page.getByTestId('pagination-page-1')).toHaveAttribute('aria-current', 'page');
+    await expect(page.getByTestId('pagination-previous')).toHaveAttribute('aria-disabled', 'true');
+    await expect(page.getByTestId('pagination-next')).toHaveAttribute('href', '/games/page/2');
+    await expect(page.getByTestId('game-card')).toHaveCount(6);
+
+    await page.getByTestId('pagination-next').click();
+
+    await expect(page).toHaveURL('/games/page/2');
+    await expect(page.getByTestId('pagination-page-2')).toHaveAttribute('aria-current', 'page');
+    await expect(page.getByTestId('pagination-previous')).toHaveAttribute('href', '/');
+    await expect(page.getByTestId('game-card')).toHaveCount(6);
+  });
+
+  test('should filter games by category and publisher', async ({ page }) => {
+    await page.goto('/games/page/2');
     const cards = page.getByTestId('game-card');
     await expect(cards.first()).toBeVisible();
 
     await page.getByTestId('category-filter-1').check();
     await expect(cards.filter({ hasText: 'DevOps Dominion' })).toBeVisible();
-    await expect(cards.filter({ hasText: 'Code Puzzle Chronicles' })).toBeHidden();
+    await expect(cards.filter({ hasText: 'Deployment Dynasty' })).toBeHidden();
 
     await page.getByTestId('publisher-filter').selectOption({ label: 'CodeForge Studios' });
     await expect(page.getByTestId('filter-results-count')).toHaveText('1 game shown');
